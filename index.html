@@ -11,7 +11,7 @@
     html, body { margin: 0; min-height: 100%; background: #0a0a0c; }
     body { color: #f5f5f7; font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
     .page-shell { min-height: 100vh; display: flex; flex-direction: column; }
-    .page-header { width: min(1100px, calc(100% - 40px)); margin: 0 auto; padding: 48px 0 4px; text-align: center; }
+    .page-header { width: min(1100px, calc(100% - 32px)); margin: 0 auto; padding: clamp(30px, 5vw, 48px) 0 4px; text-align: center; }
     .eyebrow { margin: 0 0 14px; color: #9b9ba3; font-size: 11px; font-weight: 650; letter-spacing: .18em; text-transform: uppercase; }
     h1 { margin: 0; font-size: clamp(30px, 5vw, 54px); line-height: 1.04; letter-spacing: -.045em; font-weight: 650; }
     .intro { max-width: 520px; margin: 15px auto 0; color: #9b9ba3; font-size: 15px; line-height: 1.6; }
@@ -24,10 +24,11 @@
     <header class="page-header">
       <p class="eyebrow">Interactive product experience</p>
       <h1>Meet BioBlade</h1>
-      <p class="intro">Drag the slider to explore the product from every angle. Switch between available finishes below.</p>
+      <p class="intro">Drag to explore BioBlade, switch between finishes, or open Features to discover Display mode.</p>
     </header>
 <!-- =====================================================================
   BioBlade 3D Viewer: einbettbares Element
+  Version: V2.3 (Dock-Layout ohne Überlappung, UI ausblenden im Feature-Modus, Mobile: Farben links / Features rechts)
   Einfach diesen kompletten Block in deine Webseite kopieren.
   Videos liegen im Ordner "bioblade-media/" neben dieser Datei
   (Pfade unten im CONFIG-Block anpassbar).
@@ -38,7 +39,14 @@
     <video class="bb-vid" data-key="black"  muted playsinline preload="auto"></video>
     <video class="bb-vid" data-key="white"  muted playsinline preload="auto"></video>
     <video class="bb-vid" data-key="switch" muted playsinline preload="auto"></video>
+    <video class="bb-vid" data-key="display" muted playsinline preload="auto"></video>
+    <img class="bb-callouts" src="bioblade-media/Callouts.png" alt="" aria-hidden="true">
     <div class="bb-loading">Lade …</div>
+    <div class="bb-rotate-hint" role="status" aria-live="polite">
+      <span class="bb-rotate-arrows" aria-hidden="true">↔</span>
+      <span><strong>360°</strong> Drag to rotate</span>
+    </div>
+    <button class="bb-exit" type="button" aria-label="Back to product view">×</button>
 
     <!-- Steuerung im Frame (Frosted Glass) -->
     <div class="bb-controls">
@@ -47,67 +55,97 @@
         <div class="bb-track"></div>
         <div class="bb-thumb"></div>
       </div>
-      <div class="bb-colors">
+      <div class="bb-control-divider" aria-hidden="true"></div>
+    </div>
+    <!-- Dock: Farben + Features (Desktop: eine Zeile rechts in der Leiste, Mobile: seitliche Panels) -->
+    <div class="bb-dock">
+      <div class="bb-colors" aria-label="Product colors">
         <button class="bb-color bb-active" data-color="black" aria-label="Schwarz"></button>
         <button class="bb-color" data-color="white" aria-label="Weiß"></button>
+      </div>
+      <div class="bb-feature-list" aria-label="Product features">
+        <button class="bb-feature-option bb-feature-display" type="button" data-feature="display">
+          <span>Display</span><small class="bb-feature-note">Available</small>
+        </button>
+        <button class="bb-feature-option" type="button" data-feature="dummy-one" disabled>
+          <span>Dummy</span><small>Coming soon</small>
+        </button>
+        <button class="bb-feature-option" type="button" data-feature="dummy-two" disabled>
+          <span>Dummy</span><small>Coming soon</small>
+        </button>
       </div>
     </div>
   </div>
 </div>
 
 <style>
-  .bb-viewer{
-    --bb-page:#0a0a0c;                    /* Seiten-Hintergrund (Dark Theme) */
-    --bb-bg:#000;                         /* Hintergrund im Frame */
-    --bb-accent:#fff;                     /* Slider-Knopf */
-    --bb-track:rgba(255,255,255,.22);     /* Slider-Spur */
-    --bb-glass:rgba(28,28,30,.45);        /* Frosted-Glass-Fläche */
-    width:100%; padding:48px 16px; background:var(--bb-page);
-    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
-    color:rgba(255,255,255,.6); user-select:none; -webkit-user-select:none;
-  }
-  .bb-viewer *{ box-sizing:border-box; }
-  .bb-stage{
-    position:relative; width:100%; max-width:640px; margin:0 auto; aspect-ratio:1/1;
-    background:var(--bb-bg); overflow:hidden; border-radius:24px;
-    box-shadow:0 30px 80px rgba(37, 83, 170, 0.329), 0 0 0 1px rgba(255,255,255,.07);
-  }
-  .bb-vid{ position:absolute; inset:0; width:100%; height:100%; object-fit:contain; opacity:0; pointer-events:none; }
-  .bb-vid.bb-show{ opacity:1; }
-  .bb-loading{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-size:14px; background:var(--bb-bg); transition:opacity .3s; }
-  .bb-loading.bb-hide{ opacity:0; pointer-events:none; }
-
-  /* Frosted-Glass-Leiste im Frame */
-  .bb-controls{
-    position:absolute; left:16px; right:16px; bottom:16px;
-    display:flex; align-items:center; gap:20px; padding:10px 18px;
-    background:var(--bb-glass);
-    -webkit-backdrop-filter:blur(24px) saturate(180%);
-    backdrop-filter:blur(24px) saturate(180%);
-    border:1px solid rgba(255,255,255,.12);
-    border-radius:22px;
-    box-shadow:0 8px 32px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.08);
-  }
-
-  /* Eigener Slider (mit weichem Limit am Ende) */
-  .bb-slider{ position:relative; flex:1; height:28px; cursor:grab; touch-action:none; outline:none; }
-  .bb-slider.bb-grab{ cursor:grabbing; }
-  .bb-slider.bb-disabled{ opacity:.4; pointer-events:none; }
-  .bb-track{ position:absolute; left:0; right:0; top:50%; height:4px; margin-top:-2px; border-radius:2px; background:var(--bb-track); }
-  .bb-thumb{
-    position:absolute; top:50%; left:50%; width:24px; height:24px; margin:-12px 0 0 -12px;
-    border-radius:50%; background:var(--bb-accent); box-shadow:0 2px 8px rgba(0,0,0,.4);
-    will-change:transform;
-  }
-  .bb-slider:focus-visible .bb-thumb{ box-shadow:0 0 0 3px rgba(41,151,255,.5); }
-
-  .bb-colors{ display:flex; gap:12px; }
-  .bb-color{ width:28px; height:28px; border-radius:50%; border:2px solid rgba(255,255,255,.25); cursor:pointer; padding:0; transition:transform .15s, border-color .15s; }
-  .bb-color[data-color="black"]{ background:#111; }
-  .bb-color[data-color="white"]{ background:#eee; }
-  .bb-color:hover{ transform:scale(1.1); }
-  .bb-color.bb-active{ border-color:#2997ff; box-shadow:0 0 0 2px rgba(41,151,255,.35); }
-  .bb-color:disabled{ cursor:default; }
+.bb-viewer{--bb-page:#0a0a0c;--bb-bg:#000;--bb-accent:#fff;--bb-track:rgba(255,255,255,.22);--bb-glass:rgba(28,28,30,.45);--bb-bar-h:50px;--bb-gap:clamp(10px,2.5vw,16px);--bb-dock-w:290px;width:100%;padding:clamp(20px,4vw,48px) clamp(10px,3vw,16px);background:var(--bb-page);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;color:rgba(255,255,255,.72);user-select:none;-webkit-user-select:none}
+.bb-viewer *{box-sizing:border-box}
+.bb-stage{position:relative;width:min(100%,760px);margin:0 auto;aspect-ratio:1/1;background:var(--bb-bg);overflow:hidden;border-radius:clamp(16px,3vw,24px);box-shadow:0 30px 80px rgba(37,83,170,.24),0 0 0 1px rgba(255,255,255,.07);isolation:isolate}
+.bb-vid{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;opacity:0;pointer-events:none;transition:opacity .16s ease}
+.bb-vid.bb-show{opacity:1}
+.bb-loading{position:absolute;inset:0;z-index:10;display:flex;align-items:center;justify-content:center;font-size:14px;background:var(--bb-bg);transition:opacity .3s}
+.bb-loading.bb-hide{opacity:0;pointer-events:none}
+.bb-controls{position:absolute;z-index:5;left:clamp(10px,2.5vw,16px);right:clamp(10px,2.5vw,16px);bottom:clamp(10px,2.5vw,16px);display:flex;align-items:center;gap:clamp(10px,3vw,20px);height:var(--bb-bar-h);padding:0 calc(var(--bb-dock-w) + 30px) 0 clamp(11px,3vw,18px);background:var(--bb-glass);-webkit-backdrop-filter:blur(24px) saturate(180%);backdrop-filter:blur(24px) saturate(180%);border:1px solid rgba(255,255,255,.12);border-radius:20px;box-shadow:0 8px 32px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.08);transition:opacity .24s ease,transform .24s ease}
+.bb-controls.bb-controls-hidden{opacity:0;transform:translateY(12px);pointer-events:none}
+.bb-slider{position:relative;flex:1;min-width:40px;height:28px;cursor:grab;touch-action:none;outline:none}
+.bb-slider.bb-grab{cursor:grabbing}.bb-slider.bb-disabled{opacity:.4;pointer-events:none}
+.bb-track{position:absolute;left:0;right:0;top:50%;height:4px;margin-top:-2px;border-radius:2px;background:var(--bb-track)}
+.bb-thumb{position:absolute;top:50%;left:50%;width:24px;height:24px;margin:-12px 0 0 -12px;border-radius:50%;background:var(--bb-accent);box-shadow:0 2px 8px rgba(0,0,0,.4);will-change:transform}
+.bb-slider:focus-visible .bb-thumb{box-shadow:0 0 0 3px rgba(41,151,255,.5)}
+.bb-colors{display:flex;gap:12px;flex-shrink:0}
+.bb-color{width:28px;height:28px;border-radius:50%;border:2px solid rgba(255,255,255,.25);cursor:pointer;padding:0;transition:transform .15s,border-color .15s}
+.bb-color[data-color="black"]{background:#111}.bb-color[data-color="white"]{background:#eee}
+.bb-color:hover{transform:scale(1.1)}.bb-color.bb-active{border-color:#2997ff;box-shadow:0 0 0 2px rgba(41,151,255,.35)}.bb-color:disabled{cursor:default}
+.bb-control-divider{width:1px;height:28px;flex:0 0 1px;background:rgba(255,255,255,.18)}
+.bb-dock{position:absolute;z-index:6;right:calc(var(--bb-gap) + 14px);bottom:var(--bb-gap);height:var(--bb-bar-h);display:flex;align-items:center;gap:14px}
+.bb-feature-list{display:flex;align-items:center;justify-content:flex-end;gap:5px;flex:0 0 auto}
+.bb-feature-option{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;width:66px;padding:6px 4px;border:1px solid transparent;border-radius:11px;color:rgba(255,255,255,.82);background:transparent;cursor:pointer;font:500 11px/1.2 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;white-space:nowrap;transition:background .16s,border-color .16s,color .16s,opacity .16s}
+.bb-feature-option small{font-size:9px;line-height:1.1;color:rgba(255,255,255,.4);font-weight:400}
+.bb-feature-option span,.bb-feature-option small{max-width:100%;overflow:hidden;text-overflow:ellipsis}
+.bb-feature-option:hover:not(:disabled){background:rgba(255,255,255,.09);border-color:rgba(255,255,255,.1)}
+.bb-feature-option.bb-feature-display{color:#fff}
+.bb-feature-option.bb-feature-display.bb-available{background:rgba(255,255,255,.09);border-color:rgba(255,255,255,.16)}
+.bb-feature-option:disabled{color:rgba(255,255,255,.27);cursor:not-allowed;opacity:.7}
+.bb-feature-option:disabled small{color:rgba(255,255,255,.23)}
+.bb-rotate-hint{position:absolute;z-index:7;left:50%;top:18px;display:flex;align-items:center;gap:9px;padding:9px 13px;border:1px solid rgba(255,255,255,.14);border-radius:999px;color:rgba(255,255,255,.88);background:rgba(25,25,27,.62);-webkit-backdrop-filter:blur(18px) saturate(160%);backdrop-filter:blur(18px) saturate(160%);box-shadow:0 6px 24px rgba(0,0,0,.22);font:500 11px/1 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;white-space:nowrap;opacity:0;transform:translate(-50%,-6px);pointer-events:none;transition:opacity .3s,transform .3s}
+.bb-rotate-hint.bb-hint-visible{opacity:1;transform:translate(-50%,0)}
+.bb-rotate-hint.bb-hint-hidden{opacity:0;transform:translate(-50%,-6px)}
+.bb-rotate-hint strong{font-weight:700;letter-spacing:.02em}
+.bb-rotate-arrows{font-size:19px;line-height:.7;color:#fff;animation:bbHintNudge 1.15s ease-in-out infinite alternate}
+@keyframes bbHintNudge{from{transform:translateX(-3px)}to{transform:translateX(3px)}}
+.bb-exit{position:absolute;z-index:9;top:clamp(10px,2.5vw,16px);right:clamp(10px,2.5vw,16px);display:grid;place-items:center;width:40px;height:40px;border:1px solid rgba(255,255,255,.16);border-radius:50%;color:#fff;background:rgba(25,25,27,.6);-webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px);font:300 27px/1 Arial,sans-serif;cursor:pointer;opacity:0;pointer-events:none;transform:scale(.9);transition:opacity .2s,transform .2s,background .2s}
+.bb-exit:hover{background:rgba(55,55,58,.8)}.bb-exit:disabled{cursor:wait}
+.bb-stage.bb-feature-mode .bb-exit{opacity:1;pointer-events:auto;transform:scale(1)}
+.bb-stage.bb-feature-mode .bb-controls,.bb-stage.bb-ui-hidden .bb-controls{opacity:0;transform:translateY(12px);pointer-events:none}
+.bb-colors,.bb-feature-list{transition:opacity .24s ease}
+.bb-stage.bb-feature-mode .bb-colors,.bb-stage.bb-feature-mode .bb-feature-list,.bb-stage.bb-ui-hidden .bb-colors,.bb-stage.bb-ui-hidden .bb-feature-list{opacity:0;pointer-events:none;visibility:hidden;transition:opacity .24s ease,visibility 0s linear .24s}
+.bb-callouts{position:absolute;z-index:4;inset:0;width:100%;height:100%;object-fit:contain;object-position:center center;opacity:0;pointer-events:none}
+.bb-callouts.bb-overlay-in{animation:bbOverlayFadeIn .667s linear forwards}
+.bb-callouts.bb-overlay-out{animation:bbOverlayFadeOut .667s linear forwards}
+@keyframes bbOverlayFadeIn{from{opacity:0}to{opacity:1}}
+@keyframes bbOverlayFadeOut{from{opacity:1}to{opacity:0}}
+@media(max-width:700px){
+ .bb-viewer{padding:20px 10px 28px}
+ .bb-stage{width:100%;border-radius:17px}
+ .bb-controls{display:grid;grid-template-columns:1fr;gap:0;height:auto;padding:9px 10px;border-radius:16px}
+ .bb-slider{grid-column:1;width:100%}
+ .bb-dock{display:contents}
+ .bb-colors{position:absolute;z-index:6;top:50%;left:8px;right:auto;bottom:auto;transform:translateY(-50%);flex-direction:column;gap:8px;padding:6px;background:rgba(28,28,30,.48);-webkit-backdrop-filter:blur(18px) saturate(160%);backdrop-filter:blur(18px) saturate(160%);border:1px solid rgba(255,255,255,.12);border-radius:14px;box-shadow:0 6px 24px rgba(0,0,0,.24)}
+ .bb-control-divider{display:none}
+ .bb-feature-list{position:absolute;z-index:6;top:50%;right:8px;left:auto;bottom:auto;transform:translateY(-50%);flex-direction:column;align-items:stretch;gap:4px;padding:6px;background:rgba(28,28,30,.48);-webkit-backdrop-filter:blur(18px) saturate(160%);backdrop-filter:blur(18px) saturate(160%);border:1px solid rgba(255,255,255,.12);border-radius:14px;box-shadow:0 6px 24px rgba(0,0,0,.24)}
+ .bb-feature-option{width:auto;min-width:58px;padding:9px 6px;font-size:10px}
+ .bb-feature-option small{font-size:8px}
+ .bb-color{width:25px;height:25px}
+ .bb-rotate-hint{top:12px;padding:8px 11px;font-size:10px}
+ .bb-exit{width:36px;height:36px;font-size:24px}
+}
+@media(max-width:380px){
+ .bb-feature-option{min-width:54px;padding:8px 4px}
+ .bb-feature-option small{display:none}
+ .bb-controls{gap:5px 7px}
+}
+@media(prefers-reduced-motion:reduce){.bb-callouts.bb-overlay-in,.bb-callouts.bb-overlay-out{animation-duration:.01ms}.bb-vid,.bb-controls,.bb-exit{transition-duration:.01ms}}
 </style>
 
 <script>
@@ -118,7 +156,8 @@
     files: {
       black:  { src: "BioBlade Black0001-0060.mp4",       frames: 60 },
       white:  { src: "BioBlade White0001-0060.mp4",       frames: 60 },
-      switch: { src: "BioBlade Switch Anim 0001-0030.mp4", frames: 30 }
+      switch:  { src: "BioBlade Switch Anim 0001-0030.mp4", frames: 30 },
+      display: { src: "BioBlade Display0001-0030.mp4", frames: 30 }
     },
     startColor: "black",
     snapMs: 380,         // Dauer des Zurückschnappens zur Mitte (0 = sofort)
@@ -136,6 +175,16 @@
   var thumb  = root.querySelector(".bb-thumb");
   var loader = root.querySelector(".bb-loading");
   var btns   = root.querySelectorAll(".bb-color");
+  var controls = root.querySelector(".bb-controls");
+  var stage = root.querySelector(".bb-stage");
+  var displayOption = root.querySelector('[data-feature="display"]');
+  var dummyOptions = root.querySelectorAll('[data-feature^="dummy-"]');
+  var exitButton = root.querySelector(".bb-exit");
+  var callouts = root.querySelector(".bb-callouts");
+  var rotateHint = root.querySelector(".bb-rotate-hint");
+  var hintTimer = null;
+  var featureBusy = false, featureMode = false;
+  var displayMediaReady = false, calloutsReady = false;
   var vids   = {};
   root.querySelectorAll(".bb-vid").forEach(function(v){ vids[v.dataset.key] = v; });
 
@@ -177,6 +226,128 @@
   }
   function show(key){
     Object.keys(vids).forEach(function(k){ vids[k].classList.toggle("bb-show", k === key); });
+  }
+  function safeFrameTime(key, frame){
+    var v = vids[key], n = CONFIG.files[key].frames;
+    var d = Number.isFinite(v.duration) && v.duration > 0 ? v.duration : 0;
+    return d ? Math.max(0, Math.min(d - 0.0005, (frame + 0.5) / n * d)) : 0;
+  }
+  function updateFeatureAvailability(){
+    displayOption.disabled = current !== "black" || !displayMediaReady || !calloutsReady || featureBusy || featureMode || busy;
+    displayOption.classList.toggle("bb-available", current === "black" && displayMediaReady && calloutsReady && !featureBusy && !featureMode && !busy);
+    var note = current !== "black" ? "Black only" :
+      (!displayMediaReady ? "Video missing" :
+      (!calloutsReady ? "Overlay missing" : "Feature"));
+    displayOption.querySelector(".bb-feature-note").textContent = note;
+    dummyOptions.forEach(function(option){ option.disabled = true; });
+  }
+  vids.display.addEventListener("loadedmetadata", function(){
+    displayMediaReady = true;
+    updateFeatureAvailability();
+  });
+  vids.display.addEventListener("error", function(){
+    displayMediaReady = false;
+    updateFeatureAvailability();
+  });
+  if(vids.display.readyState >= 1) displayMediaReady = true;
+  callouts.addEventListener("load", function(){
+    calloutsReady = true;
+    updateFeatureAvailability();
+  });
+  callouts.addEventListener("error", function(){
+    calloutsReady = false;
+    updateFeatureAvailability();
+  });
+  if(callouts.complete && callouts.naturalWidth > 0) calloutsReady = true;
+  function fadeCallouts(incoming){
+    return new Promise(function(resolve){
+      callouts.classList.remove("bb-overlay-in","bb-overlay-out");
+      void callouts.offsetWidth;
+      callouts.classList.add(incoming ? "bb-overlay-in" : "bb-overlay-out");
+      window.setTimeout(function(){
+        callouts.classList.remove("bb-overlay-in","bb-overlay-out");
+        callouts.style.opacity = incoming ? "1" : "0";
+        resolve();
+      }, 680);
+    });
+  }
+  function playDisplay(reverse){
+    return new Promise(function(resolve){
+      var v = vids.display, n = CONFIG.files.display.frames;
+      var duration = Number.isFinite(v.duration) && v.duration > 0 ? v.duration * 1000 : n * 33.333;
+      var start = reverse ? n - 1 : 0, end = reverse ? 0 : n - 1;
+      var t0 = performance.now();
+      (function step(now){
+        var k = Math.min(1, (now - t0) / duration);
+        var frame = Math.round(start + (end - start) * k);
+        seek(v, safeFrameTime("display", frame));
+        if(k < 1) requestAnimationFrame(step);
+        else { seek(v, safeFrameTime("display", end)); resolve(); }
+      })(t0);
+    });
+  }
+  async function enterDisplay(){
+    if(featureBusy || featureMode || current !== "black") return;
+    featureBusy = true;
+    stage.classList.add("bb-ui-hidden");          // Slider, Farben und Features sofort ausblenden
+    updateFeatureAvailability();
+    await snapToCenter(false);
+    featureMode = true;
+    stage.classList.add("bb-feature-mode");
+    controls.classList.add("bb-controls-hidden");
+    callouts.style.opacity = "0";
+    await seekAsync(vids.display, safeFrameTime("display", 0));
+    show("display");
+    await playDisplay(false);
+    await fadeCallouts(true);
+    featureBusy = false;
+    exitButton.focus({preventScroll:true});
+  }
+  async function exitDisplay(){
+    if(featureBusy || !featureMode) return;
+    featureBusy = true;
+    exitButton.disabled = true;
+    await fadeCallouts(false);
+    await playDisplay(true);
+    await seekAsync(vids.black, frameTime("black", 0));
+    current = "black";
+    show("black");
+    callouts.style.opacity = "0";
+    featureMode = false;
+    stage.classList.remove("bb-feature-mode");
+    controls.classList.remove("bb-controls-hidden");
+    stage.classList.remove("bb-ui-hidden");
+    setS(0);
+    exitButton.disabled = false;
+    featureBusy = false;
+    updateFeatureAvailability();
+  }
+  displayOption.addEventListener("click", enterDisplay);
+  exitButton.addEventListener("click", exitDisplay);
+  document.addEventListener("keydown", function(e){
+    if(e.key === "Escape" && featureMode) exitDisplay();
+  });
+  updateFeatureAvailability();
+
+  /* ---------- First-visit 360° hint ---------- */
+  var hintStorageKey = "bbViewer360HintSeen";
+  var hintAlreadySeen = false;
+  try { hintAlreadySeen = window.localStorage.getItem(hintStorageKey) === "1"; } catch(_) {}
+  function hideRotateHint(){
+    if(!rotateHint || !rotateHint.classList.contains("bb-hint-visible")) return;
+    rotateHint.classList.remove("bb-hint-visible");
+    rotateHint.classList.add("bb-hint-hidden");
+    if(hintTimer) window.clearTimeout(hintTimer);
+  }
+  if(!hintAlreadySeen){
+    requestAnimationFrame(function(){
+      rotateHint.classList.add("bb-hint-visible");
+      try { window.localStorage.setItem(hintStorageKey, "1"); } catch(_) {}
+      hintTimer = window.setTimeout(hideRotateHint, 5000);
+    });
+    slider.addEventListener("pointerdown", hideRotateHint, { once:true });
+    btns.forEach(function(b){ b.addEventListener("click", hideRotateHint, { once:true }); });
+    displayOption.addEventListener("click", hideRotateHint, { once:true });
   }
 
   /* ---------- Soft-Limit ---------- */
@@ -298,6 +469,7 @@
     dragging = false;
     slider.classList.add("bb-disabled");
     btns.forEach(function(b){ b.disabled = true; });
+    updateFeatureAvailability();
 
     await snapToCenter(false);                         // 1. Slider in die Mitte (Frame 1), ohne Bounce
 
@@ -315,6 +487,7 @@
     btns.forEach(function(b){ b.classList.toggle("bb-active", b.dataset.color === target); b.disabled = false; });
     slider.classList.remove("bb-disabled");
     busy = false;
+    updateFeatureAvailability();
   }
   btns.forEach(function(b){ b.addEventListener("click", function(){ switchTo(b.dataset.color); }); });
 
@@ -324,7 +497,10 @@
       var v = vids[k];
       if(v.readyState >= 1) return res();
       v.addEventListener("loadedmetadata", res, { once: true });
-      v.addEventListener("error", function(){ loader.textContent = "Video nicht gefunden: " + CONFIG.files[k].src; }, { once: true });
+      v.addEventListener("error", function(){
+        loader.textContent = "Video nicht gefunden: " + CONFIG.files[k].src;
+        res();
+      }, { once: true });
     });
   });
   Promise.all(ready).then(function(){
