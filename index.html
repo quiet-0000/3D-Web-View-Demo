@@ -28,7 +28,7 @@
     </header>
 <!-- =====================================================================
   BioBlade 3D Viewer: einbettbares Element
-  Version: V2.3 (Dock-Layout ohne Überlappung, UI ausblenden im Feature-Modus, Mobile: Farben links / Features rechts)
+  Version: V2.4 (Mobile-Ladefix: Videos nacheinander laden, Safari/iOS-Priming, Timeouts, Retry-Button)
   Einfach diesen kompletten Block in deine Webseite kopieren.
   Videos liegen im Ordner "bioblade-media/" neben dieser Datei
   (Pfade unten im CONFIG-Block anpassbar).
@@ -40,8 +40,11 @@
     <video class="bb-vid" data-key="white"  muted playsinline preload="auto"></video>
     <video class="bb-vid" data-key="switch" muted playsinline preload="auto"></video>
     <video class="bb-vid" data-key="display" muted playsinline preload="auto"></video>
-    <img class="bb-callouts" src="bioblade-media/Callouts.png" alt="" aria-hidden="true">
-    <div class="bb-loading">Lade …</div>
+    <img class="bb-callouts" data-src="bioblade-media/Callouts.png" alt="" aria-hidden="true">
+    <div class="bb-loading">
+      <span class="bb-loading-text">Lade …</span>
+      <button class="bb-retry" type="button" hidden>Erneut versuchen</button>
+    </div>
     <div class="bb-rotate-hint" role="status" aria-live="polite">
       <span class="bb-rotate-arrows" aria-hidden="true">↔</span>
       <span><strong>360°</strong> Drag to rotate</span>
@@ -84,8 +87,11 @@
 .bb-stage{position:relative;width:min(100%,760px);margin:0 auto;aspect-ratio:1/1;background:var(--bb-bg);overflow:hidden;border-radius:clamp(16px,3vw,24px);box-shadow:0 30px 80px rgba(37,83,170,.24),0 0 0 1px rgba(255,255,255,.07);isolation:isolate}
 .bb-vid{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;opacity:0;pointer-events:none;transition:opacity .16s ease}
 .bb-vid.bb-show{opacity:1}
-.bb-loading{position:absolute;inset:0;z-index:10;display:flex;align-items:center;justify-content:center;font-size:14px;background:var(--bb-bg);transition:opacity .3s}
+.bb-loading{position:absolute;inset:0;z-index:10;display:flex;flex-direction:column;gap:14px;padding:24px;text-align:center;align-items:center;justify-content:center;font-size:14px;background:var(--bb-bg);transition:opacity .3s}
 .bb-loading.bb-hide{opacity:0;pointer-events:none}
+.bb-loading.bb-soft{background:rgba(0,0,0,.45);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+.bb-retry{padding:10px 18px;border:1px solid rgba(255,255,255,.22);border-radius:999px;color:#fff;background:rgba(255,255,255,.1);font:500 13px/1 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;cursor:pointer}
+.bb-retry[hidden]{display:none}
 .bb-controls{position:absolute;z-index:5;left:clamp(10px,2.5vw,16px);right:clamp(10px,2.5vw,16px);bottom:clamp(10px,2.5vw,16px);display:flex;align-items:center;gap:clamp(10px,3vw,20px);height:var(--bb-bar-h);padding:0 calc(var(--bb-dock-w) + 30px) 0 clamp(11px,3vw,18px);background:var(--bb-glass);-webkit-backdrop-filter:blur(24px) saturate(180%);backdrop-filter:blur(24px) saturate(180%);border:1px solid rgba(255,255,255,.12);border-radius:20px;box-shadow:0 8px 32px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.08);transition:opacity .24s ease,transform .24s ease}
 .bb-controls.bb-controls-hidden{opacity:0;transform:translateY(12px);pointer-events:none}
 .bb-slider{position:relative;flex:1;min-width:40px;height:28px;cursor:grab;touch-action:none;outline:none}
@@ -166,6 +172,8 @@
     softStart: 0.75,     // ab hier (0–1 des Wegs) wird der Slider zum Ende hin immer langsamer
     maxReach: 0.96,      // Grenzwert, dem er sich nähert, aber nie erreicht (0.96 ≈ Frame 58 von 60)
     smoothing: 0.28,     // Nachlauf des Sliders (0.1 = sehr weich, 1 = direkt)
+    slowHintMs: 8000,    // nach dieser Zeit erscheint beim Laden der "Erneut versuchen"-Button
+    seekTimeoutMs: 1500, // Sicherheitsnetz: ein hängender Seek darf die Bedienung nie blockieren
     switchBlackToWhite: "forward" // Switch-Video läuft Schwarz→Weiß vorwärts, Weiß→Schwarz rückwärts
   };
   /* ============================================== */
@@ -174,7 +182,9 @@
   var slider = root.querySelector(".bb-slider");
   var thumb  = root.querySelector(".bb-thumb");
   var loader = root.querySelector(".bb-loading");
-  var btns   = root.querySelectorAll(".bb-color");
+  var loadText = root.querySelector(".bb-loading-text");
+  var retryBtn = root.querySelector(".bb-retry");
+  var btns  = root.querySelectorAll(".bb-color");
   var controls = root.querySelector(".bb-controls");
   var stage = root.querySelector(".bb-stage");
   var displayOption = root.querySelector('[data-feature="display"]');
@@ -197,11 +207,14 @@
   var sTarget = 0, sCur = 0; // Ziel- und aktuelle Position nach Soft-Limit
 
   /* ---------- Video-Setup ---------- */
+  // Die Videos bekommen ihre src NICHT sofort: Zuerst lädt nur die Startfarbe,
+  // alle anderen danach nacheinander im Hintergrund (schont Handy-Bandbreite
+  // und die begrenzten Video-Decoder von iOS/Safari).
   Object.keys(vids).forEach(function(k){
     var v = vids[k];
-    v._seeking = false;
-    v.src = CONFIG.folder + encodeURI(CONFIG.files[k].src);
+    v._seeking = false; v._started = false; v._failed = false; v._primed = false; v._prep = null;
     v.addEventListener("seeked", function(){
+      clearTimeout(v._wd);
       v._seeking = false;
       if(v._pending !== undefined && Math.abs(v._pending - v.currentTime) > 1e-4){
         var t = v._pending; v._pending = undefined; seekRaw(v, t);
@@ -209,17 +222,92 @@
     });
   });
 
-  function seekRaw(v, t){ v._seeking = true; v.currentTime = t; }
+  function loadVideo(k){                 // startet den Download genau einmal (bei Fehler erneut)
+    var v = vids[k];
+    if(v._started && !v._failed) return v._ready;
+    v._started = true; v._failed = false;
+    v._ready = new Promise(function(res){
+      function cleanup(){ v.removeEventListener("loadedmetadata", ok); v.removeEventListener("error", bad); }
+      function ok(){ cleanup(); res(true); }
+      function bad(){ cleanup(); v._failed = true; res(false); }
+      v.addEventListener("loadedmetadata", ok);
+      v.addEventListener("error", bad);
+      v.preload = "auto";
+      v.src = CONFIG.folder + encodeURI(CONFIG.files[k].src);
+      try { v.load(); } catch(_) {}
+    });
+    return v._ready;
+  }
+  // iOS/Safari lädt Videodaten oft erst, wenn einmal play() versucht wurde.
+  // Kurz (stumm) anspielen und wieder pausieren, damit Seeks danach Daten haben.
+  function prime(v){
+    return new Promise(function(res){
+      var p, t = setTimeout(finish, 700);
+      function finish(){ clearTimeout(t); try { v.pause(); } catch(_) {} res(); }
+      try { p = v.play(); } catch(_) {}
+      if(p && p.then){ p.then(function(){ setTimeout(finish, 60); }, finish); }
+      else { setTimeout(finish, 60); }
+    });
+  }
+  function prepare(k){                   // true = geladen + bereit, false = Fehler
+    var v = vids[k];
+    if(v._prep && !v._failed) return v._prep;
+    v._prep = loadVideo(k).then(function(ok){
+      if(!ok) return false;
+      if(v._primed) return true;
+      v._primed = true;
+      return prime(v).then(function(){ return true; });
+    });
+    return v._prep;
+  }
+  function resetVideo(k){
+    var v = vids[k];
+    v._started = false; v._failed = false; v._primed = false; v._prep = null; v._seeking = false;
+    v.removeAttribute("src");
+    try { v.load(); } catch(_) {}
+  }
+  function showLoader(text, soft){
+    loadText.textContent = text || "Lade …";
+    retryBtn.hidden = true;
+    loader.classList.toggle("bb-soft", !!soft);
+    loader.classList.remove("bb-hide");
+  }
+  function hideLoader(){ loader.classList.add("bb-hide"); }
+  // Stellt sicher, dass die gebrauchten Videos geladen sind (zeigt dabei ein Lade-Overlay).
+  async function ensure(keys){
+    var pending = keys.filter(function(k){ return !(vids[k]._started && !vids[k]._failed && vids[k].readyState >= 1 && vids[k]._primed); });
+    if(!pending.length) return true;
+    showLoader("Lade …", true);
+    var oks = await Promise.all(pending.map(prepare));
+    var allOk = oks.every(Boolean);
+    if(allOk){ hideLoader(); return true; }
+    loadText.textContent = "Video konnte nicht geladen werden. Bitte erneut versuchen.";
+    window.setTimeout(hideLoader, 2400);
+    return false;
+  }
+
+  function seekRaw(v, t){
+    if(v.readyState < 1 || !isFinite(t)) return;   // noch keine Metadaten: nichts anfassen
+    v._seeking = true; v.currentTime = t;
+    clearTimeout(v._wd);                           // Watchdog: falls "seeked" nie kommt (iOS), nicht hängen bleiben
+    v._wd = setTimeout(function(){
+      v._seeking = false;
+      if(v._pending !== undefined){ var p = v._pending; v._pending = undefined; seekRaw(v, p); }
+    }, 600);
+  }
   function seek(v, t){
     if(v._seeking){ v._pending = t; } else { seekRaw(v, t); }
   }
   function frameTime(key, f){            // f = 0-basiert
     var v = vids[key], n = CONFIG.files[key].frames;
-    return Math.min(v.duration - 0.0005, (f + 0.5) / n * v.duration);
+    var d = Number.isFinite(v.duration) && v.duration > 0 ? v.duration : 0;
+    return d ? Math.max(0, Math.min(d - 0.0005, (f + 0.5) / n * d)) : 0;
   }
   function seekAsync(v, t){
     return new Promise(function(res){
-      function done(){ v.removeEventListener("seeked", done); res(); }
+      if(v.readyState < 1){ res(); return; }
+      var timer = setTimeout(done, CONFIG.seekTimeoutMs);
+      function done(){ clearTimeout(timer); v.removeEventListener("seeked", done); res(); }
       v.addEventListener("seeked", done);
       v._pending = undefined; seekRaw(v, t);
     });
@@ -227,35 +315,32 @@
   function show(key){
     Object.keys(vids).forEach(function(k){ vids[k].classList.toggle("bb-show", k === key); });
   }
-  function safeFrameTime(key, frame){
-    var v = vids[key], n = CONFIG.files[key].frames;
-    var d = Number.isFinite(v.duration) && v.duration > 0 ? v.duration : 0;
-    return d ? Math.max(0, Math.min(d - 0.0005, (frame + 0.5) / n * d)) : 0;
-  }
+  function safeFrameTime(key, frame){ return frameTime(key, frame); }
+  var displayFailed = false, calloutsFailed = false;
   function updateFeatureAvailability(){
     displayOption.disabled = current !== "black" || !displayMediaReady || !calloutsReady || featureBusy || featureMode || busy;
     displayOption.classList.toggle("bb-available", current === "black" && displayMediaReady && calloutsReady && !featureBusy && !featureMode && !busy);
     var note = current !== "black" ? "Black only" :
-      (!displayMediaReady ? "Video missing" :
-      (!calloutsReady ? "Overlay missing" : "Feature"));
+      (!displayMediaReady ? (displayFailed ? "Video missing" : "Loading …") :
+      (!calloutsReady ? (calloutsFailed ? "Overlay missing" : "Loading …") : "Feature"));
     displayOption.querySelector(".bb-feature-note").textContent = note;
     dummyOptions.forEach(function(option){ option.disabled = true; });
   }
   vids.display.addEventListener("loadedmetadata", function(){
-    displayMediaReady = true;
+    displayMediaReady = true; displayFailed = false;
     updateFeatureAvailability();
   });
   vids.display.addEventListener("error", function(){
-    displayMediaReady = false;
+    displayMediaReady = false; displayFailed = true;
     updateFeatureAvailability();
   });
   if(vids.display.readyState >= 1) displayMediaReady = true;
   callouts.addEventListener("load", function(){
-    calloutsReady = true;
+    calloutsReady = true; calloutsFailed = false;
     updateFeatureAvailability();
   });
   callouts.addEventListener("error", function(){
-    calloutsReady = false;
+    calloutsReady = false; calloutsFailed = true;
     updateFeatureAvailability();
   });
   if(callouts.complete && callouts.naturalWidth > 0) calloutsReady = true;
@@ -289,6 +374,7 @@
   async function enterDisplay(){
     if(featureBusy || featureMode || current !== "black") return;
     featureBusy = true;
+    if(!(await ensure(["display"]))){ featureBusy = false; updateFeatureAvailability(); return; }
     stage.classList.add("bb-ui-hidden");          // Slider, Farben und Features sofort ausblenden
     updateFeatureAvailability();
     await snapToCenter(false);
@@ -471,6 +557,13 @@
     btns.forEach(function(b){ b.disabled = true; });
     updateFeatureAvailability();
 
+    if(!(await ensure(["switch", target]))){           // Videos ggf. erst nachladen
+      btns.forEach(function(b){ b.disabled = false; });
+      slider.classList.remove("bb-disabled");
+      busy = false;
+      updateFeatureAvailability();
+      return;
+    }
     await snapToCenter(false);                         // 1. Slider in die Mitte (Frame 1), ohne Bounce
 
     var reverse = (target === "black");                // Weiß → Schwarz = rückwärts
@@ -492,23 +585,42 @@
   btns.forEach(function(b){ b.addEventListener("click", function(){ switchTo(b.dataset.color); }); });
 
   /* ---------- Start ---------- */
-  var ready = Object.keys(vids).map(function(k){
-    return new Promise(function(res){
-      var v = vids[k];
-      if(v.readyState >= 1) return res();
-      v.addEventListener("loadedmetadata", res, { once: true });
-      v.addEventListener("error", function(){
-        loader.textContent = "Video nicht gefunden: " + CONFIG.files[k].src;
-        res();
-      }, { once: true });
+  var slowTimer = null;
+  function loadBackground(){             // Rest nacheinander laden: Overlay-Bild, Weiß, Switch, Display
+    if(!callouts.getAttribute("src")) callouts.src = callouts.getAttribute("data-src");
+    var order = ["white", "switch", "display"];
+    (function next(i){
+      if(i >= order.length) return;
+      prepare(order[i]).then(function(){ next(i + 1); });
+    })(0);
+  }
+  function boot(){
+    showLoader("Lade …", false);
+    clearTimeout(slowTimer);
+    slowTimer = setTimeout(function(){     // dauert es lange, kann man neu anstoßen
+      loadText.textContent = "Dauert länger als gewöhnlich …";
+      retryBtn.hidden = false;
+    }, CONFIG.slowHintMs);
+    prepare(current).then(function(ok){
+      if(!ok){
+        clearTimeout(slowTimer);
+        loadText.textContent = "Video nicht gefunden: " + CONFIG.files[current].src;
+        retryBtn.hidden = false;
+        return;
+      }
+      return seekAsync(vids[current], frameTime(current, 0)).then(function(){
+        clearTimeout(slowTimer);
+        show(current);
+        hideLoader();
+        loadBackground();
+      });
     });
+  }
+  retryBtn.addEventListener("click", function(){
+    resetVideo(current);
+    boot();
   });
-  Promise.all(ready).then(function(){
-    return seekAsync(vids[current], frameTime(current, 0));
-  }).then(function(){
-    show(current);
-    loader.classList.add("bb-hide");
-  });
+  boot();
 })();
 </script>
 
