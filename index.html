@@ -10,13 +10,29 @@
     * { box-sizing: border-box; }
     html, body { margin: 0; min-height: 100%; background: #0a0a0c; }
     body { color: #f5f5f7; font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
-    .page-shell { min-height: 100vh; display: flex; flex-direction: column; }
+    .page-shell { position: relative; z-index: 1; min-height: 100vh; display: flex; flex-direction: column; }
+    /* Dezentes Grid: feine Linien, zu den Rändern hin ausgeblendet (bleibt beim Scrollen stehen) */
+    body::before {
+      content: ""; position: fixed; inset: 0; z-index: 0; pointer-events: none;
+      background-image:
+        linear-gradient(rgba(255,255,255,.06) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,.06) 1px, transparent 1px);
+      background-size: 56px 56px; background-position: 50% 0;
+      -webkit-mask-image: radial-gradient(ellipse 95% 85% at 50% 40%, #000 0%, rgba(0,0,0,.6) 60%, transparent 100%);
+      mask-image: radial-gradient(ellipse 95% 85% at 50% 40%, #000 0%, rgba(0,0,0,.6) 60%, transparent 100%);
+    }
+    .page-shell .bb-viewer { background: transparent; } /* eingebettet in die Seite: Grid scheint durch */
     .page-header { width: min(1100px, calc(100% - 32px)); margin: 0 auto; padding: clamp(30px, 5vw, 48px) 0 4px; text-align: center; }
     .eyebrow { margin: 0 0 14px; color: #9b9ba3; font-size: 11px; font-weight: 650; letter-spacing: .18em; text-transform: uppercase; }
     h1 { margin: 0; font-size: clamp(30px, 5vw, 54px); line-height: 1.04; letter-spacing: -.045em; font-weight: 650; }
     .intro { max-width: 520px; margin: 15px auto 0; color: #9b9ba3; font-size: 15px; line-height: 1.6; }
-    .page-footer { margin: auto auto 0; padding: 0 20px 28px; color: #686870; font-size: 12px; text-align: center; }
-    @media (max-width: 600px) { .page-header { padding-top: 34px; } .intro { font-size: 14px; } }
+    .page-footer { position: relative; align-self: stretch; margin: auto 0 0; padding: 0 20px 28px; color: #686870; font-size: 12px; text-align: center; }
+    /* Logo: klein und dezent unten rechts, verlinkt auf Instagram (Datei: bioblade-media/logo.png) */
+    .footer-logo-link { position: absolute; right: clamp(12px, 2.6vw, 24px); bottom: 15px; display: block; padding: 6px; border-radius: 10px; opacity: .4; transition: opacity .25s ease, transform .25s ease; -webkit-tap-highlight-color: transparent; }
+    .footer-logo-link:hover, .footer-logo-link:focus-visible { opacity: .85; transform: translateY(-1px); }
+    .footer-logo-link:focus-visible { outline: 2px solid rgba(41,151,255,.6); outline-offset: 1px; }
+    .footer-logo { display: block; height: 28px; width: auto; }
+    @media (max-width: 440px) { .footer-logo-link { position: static; display: table; margin: 8px auto 0; } }
   </style>
 </head>
 <body>
@@ -28,7 +44,7 @@
     </header>
 <!-- =====================================================================
   BioBlade 3D Viewer: einbettbares Element
-  Version: V2.4 (Mobile-Ladefix: Videos nacheinander laden, Safari/iOS-Priming, Timeouts, Retry-Button)
+  Version: V2.12 (Display-Overlay: Callouts.jpg statt Callouts.png)
   Einfach diesen kompletten Block in deine Webseite kopieren.
   Videos liegen im Ordner "bioblade-media/" neben dieser Datei
   (Pfade unten im CONFIG-Block anpassbar).
@@ -40,9 +56,13 @@
     <video class="bb-vid" data-key="white"  muted playsinline preload="auto"></video>
     <video class="bb-vid" data-key="switch" muted playsinline preload="auto"></video>
     <video class="bb-vid" data-key="display" muted playsinline preload="auto"></video>
-    <img class="bb-callouts" data-src="bioblade-media/Callouts.png" alt="" aria-hidden="true">
+    <video class="bb-vid" data-key="battery" muted playsinline preload="auto"></video>
+    <!-- Overlay-Bilder pro Feature (Pfad steht in CONFIG.features) -->
+    <img class="bb-callouts" data-overlay="display" alt="" aria-hidden="true">
+    <img class="bb-callouts" data-overlay="battery" alt="" aria-hidden="true">
     <div class="bb-loading">
       <span class="bb-loading-text">Lade …</span>
+      <div class="bb-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i class="bb-progress-fill"></i></div>
       <button class="bb-retry" type="button" hidden>Erneut versuchen</button>
     </div>
     <div class="bb-rotate-hint" role="status" aria-live="polite">
@@ -67,14 +87,14 @@
         <button class="bb-color" data-color="white" aria-label="Weiß"></button>
       </div>
       <div class="bb-feature-list" aria-label="Product features">
-        <button class="bb-feature-option bb-feature-display" type="button" data-feature="display">
+        <button class="bb-feature-option bb-feature-live" type="button" data-feature="display">
           <span>Display</span><small class="bb-feature-note">Available</small>
         </button>
-        <button class="bb-feature-option" type="button" data-feature="dummy-one" disabled>
-          <span>Dummy</span><small>Coming soon</small>
+        <button class="bb-feature-option bb-feature-live" type="button" data-feature="battery" disabled>
+          <span>Battery</span><small class="bb-feature-note">Loading …</small>
         </button>
         <button class="bb-feature-option" type="button" data-feature="dummy-two" disabled>
-          <span>Dummy</span><small>Coming soon</small>
+          <span>Feature X</span><small>Open slot</small>
         </button>
       </div>
     </div>
@@ -85,11 +105,17 @@
 .bb-viewer{--bb-page:#0a0a0c;--bb-bg:#000;--bb-accent:#fff;--bb-track:rgba(255,255,255,.22);--bb-glass:rgba(28,28,30,.45);--bb-bar-h:50px;--bb-gap:clamp(10px,2.5vw,16px);--bb-dock-w:290px;width:100%;padding:clamp(20px,4vw,48px) clamp(10px,3vw,16px);background:var(--bb-page);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;color:rgba(255,255,255,.72);user-select:none;-webkit-user-select:none}
 .bb-viewer *{box-sizing:border-box}
 .bb-stage{position:relative;width:min(100%,760px);margin:0 auto;aspect-ratio:1/1;background:var(--bb-bg);overflow:hidden;border-radius:clamp(16px,3vw,24px);box-shadow:0 30px 80px rgba(37,83,170,.24),0 0 0 1px rgba(255,255,255,.07);isolation:isolate}
-.bb-vid{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;opacity:0;pointer-events:none;transition:opacity .16s ease}
+.bb-vid{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;opacity:0;pointer-events:none;background:var(--bb-bg)}
 .bb-vid.bb-show{opacity:1}
-.bb-loading{position:absolute;inset:0;z-index:10;display:flex;flex-direction:column;gap:14px;padding:24px;text-align:center;align-items:center;justify-content:center;font-size:14px;background:var(--bb-bg);transition:opacity .3s}
-.bb-loading.bb-hide{opacity:0;pointer-events:none}
-.bb-loading.bb-soft{background:rgba(0,0,0,.45);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+.bb-vid.bb-top{z-index:1}
+.bb-loading{position:absolute;inset:0;z-index:10;display:flex;flex-direction:column;gap:14px;padding:24px;text-align:center;align-items:center;justify-content:center;font-size:14px;letter-spacing:.01em;color:rgba(255,255,255,.92);background:rgba(0,0,0,.34);-webkit-backdrop-filter:blur(22px) saturate(140%);backdrop-filter:blur(22px) saturate(140%);transition:opacity .35s ease,visibility 0s linear 0s}
+.bb-loading.bb-hide{opacity:0;pointer-events:none;visibility:hidden;transition:opacity .35s ease,visibility 0s linear .35s}
+.bb-loading.bb-soft{background:rgba(0,0,0,.22)}
+.bb-progress{width:min(240px,62%);height:4px;border-radius:2px;background:rgba(255,255,255,.2);overflow:hidden}
+.bb-progress-fill{display:block;height:100%;width:0;border-radius:2px;background:#fff;transition:width .18s ease}
+.bb-progress.bb-indet .bb-progress-fill{width:38%;transition:none;animation:bbIndet 1.15s ease-in-out infinite}
+.bb-loading.bb-error .bb-progress{display:none}
+@keyframes bbIndet{0%{transform:translateX(-110%)}100%{transform:translateX(270%)}}
 .bb-retry{padding:10px 18px;border:1px solid rgba(255,255,255,.22);border-radius:999px;color:#fff;background:rgba(255,255,255,.1);font:500 13px/1 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;cursor:pointer}
 .bb-retry[hidden]{display:none}
 .bb-controls{position:absolute;z-index:5;left:clamp(10px,2.5vw,16px);right:clamp(10px,2.5vw,16px);bottom:clamp(10px,2.5vw,16px);display:flex;align-items:center;gap:clamp(10px,3vw,20px);height:var(--bb-bar-h);padding:0 calc(var(--bb-dock-w) + 30px) 0 clamp(11px,3vw,18px);background:var(--bb-glass);-webkit-backdrop-filter:blur(24px) saturate(180%);backdrop-filter:blur(24px) saturate(180%);border:1px solid rgba(255,255,255,.12);border-radius:20px;box-shadow:0 8px 32px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.08);transition:opacity .24s ease,transform .24s ease}
@@ -97,11 +123,14 @@
 .bb-slider{position:relative;flex:1;min-width:40px;height:28px;cursor:grab;touch-action:none;outline:none}
 .bb-slider.bb-grab{cursor:grabbing}.bb-slider.bb-disabled{opacity:.4;pointer-events:none}
 .bb-track{position:absolute;left:0;right:0;top:50%;height:4px;margin-top:-2px;border-radius:2px;background:var(--bb-track)}
-.bb-thumb{position:absolute;top:50%;left:50%;width:24px;height:24px;margin:-12px 0 0 -12px;border-radius:50%;background:var(--bb-accent);box-shadow:0 2px 8px rgba(0,0,0,.4);will-change:transform}
+.bb-thumb{position:absolute;top:50%;left:50%;width:24px;height:24px;margin:-12px 0 0 -12px;border-radius:50%;background:var(--bb-accent);box-shadow:0 2px 8px rgba(0,0,0,.4);will-change:transform;transition:scale .18s ease,box-shadow .18s ease}
+.bb-slider.bb-grab .bb-thumb{scale:1.12;box-shadow:0 3px 12px rgba(0,0,0,.5)}
 .bb-slider:focus-visible .bb-thumb{box-shadow:0 0 0 3px rgba(41,151,255,.5)}
 .bb-colors{display:flex;gap:12px;flex-shrink:0}
 .bb-color{width:28px;height:28px;border-radius:50%;border:2px solid rgba(255,255,255,.25);cursor:pointer;padding:0;transition:transform .15s,border-color .15s}
 .bb-color[data-color="black"]{background:#111}.bb-color[data-color="white"]{background:#eee}
+.bb-color.bb-pending{opacity:.5;animation:bbPulse 1.4s ease-in-out infinite}
+@keyframes bbPulse{50%{opacity:.85}}
 .bb-color:hover{transform:scale(1.1)}.bb-color.bb-active{border-color:#2997ff;box-shadow:0 0 0 2px rgba(41,151,255,.35)}.bb-color:disabled{cursor:default}
 .bb-control-divider{width:1px;height:28px;flex:0 0 1px;background:rgba(255,255,255,.18)}
 .bb-dock{position:absolute;z-index:6;right:calc(var(--bb-gap) + 14px);bottom:var(--bb-gap);height:var(--bb-bar-h);display:flex;align-items:center;gap:14px}
@@ -110,8 +139,8 @@
 .bb-feature-option small{font-size:9px;line-height:1.1;color:rgba(255,255,255,.4);font-weight:400}
 .bb-feature-option span,.bb-feature-option small{max-width:100%;overflow:hidden;text-overflow:ellipsis}
 .bb-feature-option:hover:not(:disabled){background:rgba(255,255,255,.09);border-color:rgba(255,255,255,.1)}
-.bb-feature-option.bb-feature-display{color:#fff}
-.bb-feature-option.bb-feature-display.bb-available{background:rgba(255,255,255,.09);border-color:rgba(255,255,255,.16)}
+.bb-feature-option.bb-feature-live{color:#fff}
+.bb-feature-option.bb-feature-live.bb-available{background:rgba(255,255,255,.09);border-color:rgba(255,255,255,.16)}
 .bb-feature-option:disabled{color:rgba(255,255,255,.27);cursor:not-allowed;opacity:.7}
 .bb-feature-option:disabled small{color:rgba(255,255,255,.23)}
 .bb-rotate-hint{position:absolute;z-index:7;left:50%;top:18px;display:flex;align-items:center;gap:9px;padding:9px 13px;border:1px solid rgba(255,255,255,.14);border-radius:999px;color:rgba(255,255,255,.88);background:rgba(25,25,27,.62);-webkit-backdrop-filter:blur(18px) saturate(160%);backdrop-filter:blur(18px) saturate(160%);box-shadow:0 6px 24px rgba(0,0,0,.22);font:500 11px/1 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;white-space:nowrap;opacity:0;transform:translate(-50%,-6px);pointer-events:none;transition:opacity .3s,transform .3s}
@@ -163,16 +192,23 @@
       black:  { src: "BioBlade Black0001-0060.mp4",       frames: 60 },
       white:  { src: "BioBlade White0001-0060.mp4",       frames: 60 },
       switch:  { src: "BioBlade Switch Anim 0001-0030.mp4", frames: 30 },
-      display: { src: "BioBlade Display0001-0030.mp4", frames: 30 }
+      display: { src: "BioBlade Display0001-0030.mp4", frames: 30 },
+      battery: { src: "BioBlade Battery0001-0030.mp4", frames: 30 }
+    },
+    // Features (nur in Schwarz): Transition-Video (aus files) + Overlay-Bild, das danach langsam einblendet
+    features: {
+      display: { video: "display", overlay: "Callouts.jpg" },
+      battery: { video: "battery", overlay: "Battery.jpg" }
     },
     startColor: "black",
-    snapMs: 380,         // Dauer des Zurückschnappens zur Mitte (0 = sofort)
-    bounce: 0.9,         // Stärke des Bounce-Back beim Loslassen (0 = keiner, 0.9 = subtil, 1.7 = stark)
+    snapMs: 380,         // Dauer des Zurückschnappens bei Farb-/Feature-Wechsel (ohne Bounce, 0 = sofort)
+    springSpeed: 240,    // Beim Loslassen: Federsteifigkeit (höher = schneller zurück, 150 = gemütlich, 320 = knackig)
+    springDamping: 0.72, // Beim Loslassen: Dämpfung (1 = kein Bounce, 0.72 = subtil, 0.55 = deutlich)
     leftWraps: true,     // links: 1 → 60 → 59 → … (gespiegelte Drehrichtung)
     softStart: 0.75,     // ab hier (0–1 des Wegs) wird der Slider zum Ende hin immer langsamer
     maxReach: 0.96,      // Grenzwert, dem er sich nähert, aber nie erreicht (0.96 ≈ Frame 58 von 60)
-    smoothing: 0.28,     // Nachlauf des Sliders (0.1 = sehr weich, 1 = direkt)
-    slowHintMs: 8000,    // nach dieser Zeit erscheint beim Laden der "Erneut versuchen"-Button
+    smoothing: 0.28,     // Nachlauf des Sliders beim Ziehen, pro 60-Hz-Frame (0.1 = sehr weich, 1 = direkt)
+    slowHintMs: 8000,    // wenn so lange KEIN Ladefortschritt kommt, erscheint der "Erneut versuchen"-Button
     seekTimeoutMs: 1500, // Sicherheitsnetz: ein hängender Seek darf die Bedienung nie blockieren
     switchBlackToWhite: "forward" // Switch-Video läuft Schwarz→Weiß vorwärts, Weiß→Schwarz rückwärts
   };
@@ -184,17 +220,16 @@
   var loader = root.querySelector(".bb-loading");
   var loadText = root.querySelector(".bb-loading-text");
   var retryBtn = root.querySelector(".bb-retry");
+  var progressBar = root.querySelector(".bb-progress");
+  var progressFill = root.querySelector(".bb-progress-fill");
   var btns  = root.querySelectorAll(".bb-color");
   var controls = root.querySelector(".bb-controls");
   var stage = root.querySelector(".bb-stage");
-  var displayOption = root.querySelector('[data-feature="display"]');
   var dummyOptions = root.querySelectorAll('[data-feature^="dummy-"]');
   var exitButton = root.querySelector(".bb-exit");
-  var callouts = root.querySelector(".bb-callouts");
   var rotateHint = root.querySelector(".bb-rotate-hint");
   var hintTimer = null;
   var featureBusy = false, featureMode = false;
-  var displayMediaReady = false, calloutsReady = false;
   var vids   = {};
   root.querySelectorAll(".bb-vid").forEach(function(v){ vids[v.dataset.key] = v; });
 
@@ -213,6 +248,7 @@
   Object.keys(vids).forEach(function(k){
     var v = vids[k];
     v._seeking = false; v._started = false; v._failed = false; v._primed = false; v._prep = null;
+    v._progress = 0; v._unknown = false; v._gen = 0; v._blobUrl = null; v._abort = null;
     v.addEventListener("seeked", function(){
       clearTimeout(v._wd);
       v._seeking = false;
@@ -222,19 +258,119 @@
     });
   });
 
-  function loadVideo(k){                 // startet den Download genau einmal (bei Fehler erneut)
+  /* ---------- Laden mit Fortschritt ---------- */
+  // Über http(s): Video per fetch laden (echter Byte-Fortschritt) und als Blob abspielen.
+  // Das ist auch in Safari zuverlässiger, weil keine Range-Requests nötig sind.
+  // Per Doppelklick (file://) geht das nicht, dann wird normal geladen und der Puffer gemessen.
+  var loaderKeys = [], lastProgressAt = Date.now();
+  function canFetchBlob(){
+    return /^https?:$/.test(location.protocol) && !!window.fetch && !!window.ReadableStream && !!window.URL && !!URL.createObjectURL;
+  }
+  function isReady(k){
     var v = vids[k];
-    if(v._started && !v._failed) return v._ready;
-    v._started = true; v._failed = false;
-    v._ready = new Promise(function(res){
+    return v._started && !v._failed && v.readyState >= 1 && v._primed;
+  }
+  function loadingNote(k){
+    var v = vids[k];
+    return (v._unknown || !v._progress) ? "Loading …" : "Loading " + Math.round(v._progress * 100) + " %";
+  }
+  function updateColorPending(){
+    btns.forEach(function(b){
+      var c = b.dataset.color;
+      b.classList.toggle("bb-pending", c !== current && !(isReady(c) && isReady("switch")));
+    });
+  }
+  function refreshLoadState(){ updateFeatureAvailability(); updateColorPending(); }
+  function renderLoader(){
+    if(loader.classList.contains("bb-hide") || loader.classList.contains("bb-error") || !loaderKeys.length) return;
+    retryBtn.hidden = true;
+    var sum = 0, indet = true;
+    loaderKeys.forEach(function(k){
+      var v = vids[k];
+      sum += v._progress;
+      if(!(v._unknown && v._progress < 1)) indet = false;
+    });
+    var pct = Math.round(Math.min(1, sum / loaderKeys.length) * 100);
+    progressBar.classList.toggle("bb-indet", indet);
+    progressFill.style.width = indet ? "" : pct + "%";
+    progressBar.setAttribute("aria-valuenow", indet ? 0 : pct);
+    loadText.textContent = indet ? "Lade …" : "Lade " + pct + " %";
+  }
+  function setProgress(k, p, unknown){
+    var v = vids[k];
+    var np = Math.max(v._progress, Math.min(1, p));
+    var changed = Math.round(np * 100) !== Math.round(v._progress * 100) || !!unknown !== v._unknown;
+    v._progress = np; v._unknown = !!unknown;
+    lastProgressAt = Date.now();
+    if(changed){ renderLoader(); refreshLoadState(); }
+  }
+  function fetchToBlob(k, v, url){        // → Blob-URL, oder null (dann normal laden)
+    return new Promise(function(resolve){
+      var ctrl = window.AbortController ? new AbortController() : null;
+      v._abort = ctrl;
+      fetch(url, ctrl ? { signal: ctrl.signal } : {}).then(function(r){
+        if(!r.ok || !r.body || !r.body.getReader) throw new Error("no stream");
+        var total = +r.headers.get("content-length") || 0;
+        var ct = r.headers.get("content-type") || "";
+        var reader = r.body.getReader(), chunks = [], got = 0;
+        setProgress(k, 0, !total);
+        return (function pump(){
+          return reader.read().then(function(d){
+            if(d.done) return;
+            chunks.push(d.value); got += d.value.length;
+            if(total) setProgress(k, Math.min(.99, got / total), false); else lastProgressAt = Date.now();
+            return pump();
+          });
+        })().then(function(){
+          var blob = new Blob(chunks, { type: /^video\//.test(ct) ? ct : "video/mp4" });
+          resolve(URL.createObjectURL(blob));
+        });
+      }).catch(function(){ resolve(null); });
+    });
+  }
+  function waitBuffered(k, v){            // nur ohne Blob: warten, bis das Video (fast) komplett gepuffert ist
+    return new Promise(function(res){
+      var t0 = Date.now(), lastGrow = Date.now(), last = -1;
+      (function poll(){
+        var d = v.duration, b = 0;
+        try { if(v.buffered.length) b = v.buffered.end(v.buffered.length - 1); } catch(_) {}
+        var frac = d > 0 ? b / d : 0;
+        setProgress(k, Math.min(.99, frac), false);
+        if(frac !== last){ last = frac; lastGrow = Date.now(); }
+        if(v.error){ res(); return; }
+        if(frac >= .985 || (v.readyState >= 3 && Date.now() - lastGrow > 2500) || Date.now() - t0 > 30000){
+          setProgress(k, 1, false); res(); return;
+        }
+        setTimeout(poll, 200);
+      })();
+    });
+  }
+  function attach(k, v, src, isBlob){
+    return new Promise(function(res){
       function cleanup(){ v.removeEventListener("loadedmetadata", ok); v.removeEventListener("error", bad); }
-      function ok(){ cleanup(); res(true); }
+      function ok(){
+        cleanup();
+        if(isBlob){ setProgress(k, 1, false); res(true); }
+        else { waitBuffered(k, v).then(function(){ res(true); }); }
+      }
       function bad(){ cleanup(); v._failed = true; res(false); }
       v.addEventListener("loadedmetadata", ok);
       v.addEventListener("error", bad);
+      if(!isBlob) setProgress(k, 0, true);
       v.preload = "auto";
-      v.src = CONFIG.folder + encodeURI(CONFIG.files[k].src);
+      v.src = src;
       try { v.load(); } catch(_) {}
+    });
+  }
+  function loadVideo(k){                 // startet den Download genau einmal (bei Fehler erneut)
+    var v = vids[k];
+    if(v._started && !v._failed) return v._ready;
+    v._started = true; v._failed = false; v._progress = 0; v._unknown = false;
+    var gen = v._gen, url = CONFIG.folder + encodeURI(CONFIG.files[k].src);
+    v._ready = (canFetchBlob() ? fetchToBlob(k, v, url) : Promise.resolve(null)).then(function(blobUrl){
+      if(gen !== v._gen){ if(blobUrl) URL.revokeObjectURL(blobUrl); return false; }
+      v._blobUrl = blobUrl;
+      return attach(k, v, blobUrl || url, !!blobUrl);
     });
     return v._ready;
   }
@@ -256,32 +392,41 @@
       if(!ok) return false;
       if(v._primed) return true;
       v._primed = true;
-      return prime(v).then(function(){ return true; });
+      return prime(v).then(function(){ refreshLoadState(); return true; });
     });
     return v._prep;
   }
   function resetVideo(k){
     var v = vids[k];
+    v._gen++;
+    if(v._abort){ try { v._abort.abort(); } catch(_) {} v._abort = null; }
+    if(v._blobUrl){ try { URL.revokeObjectURL(v._blobUrl); } catch(_) {} v._blobUrl = null; }
     v._started = false; v._failed = false; v._primed = false; v._prep = null; v._seeking = false;
+    v._progress = 0; v._unknown = false;
     v.removeAttribute("src");
     try { v.load(); } catch(_) {}
   }
-  function showLoader(text, soft){
-    loadText.textContent = text || "Lade …";
-    retryBtn.hidden = true;
+  function showLoader(keys, soft){       // Overlay mit geblurrter UI + Fortschrittsbalken
+    loaderKeys = keys;
+    loader.classList.remove("bb-error");
     loader.classList.toggle("bb-soft", !!soft);
     loader.classList.remove("bb-hide");
+    renderLoader();
   }
   function hideLoader(){ loader.classList.add("bb-hide"); }
-  // Stellt sicher, dass die gebrauchten Videos geladen sind (zeigt dabei ein Lade-Overlay).
+  function loaderError(text, withRetry){
+    loader.classList.add("bb-error");
+    loadText.textContent = text;
+    retryBtn.hidden = !withRetry;
+  }
+  // Stellt sicher, dass die gebrauchten Videos geladen sind (zeigt dabei das Lade-Overlay).
   async function ensure(keys){
-    var pending = keys.filter(function(k){ return !(vids[k]._started && !vids[k]._failed && vids[k].readyState >= 1 && vids[k]._primed); });
+    var pending = keys.filter(function(k){ return !isReady(k); });
     if(!pending.length) return true;
-    showLoader("Lade …", true);
+    showLoader(pending, true);
     var oks = await Promise.all(pending.map(prepare));
-    var allOk = oks.every(Boolean);
-    if(allOk){ hideLoader(); return true; }
-    loadText.textContent = "Video konnte nicht geladen werden. Bitte erneut versuchen.";
+    if(oks.every(Boolean)){ hideLoader(); return true; }
+    loaderError("Video konnte nicht geladen werden. Bitte erneut versuchen.", false);
     window.setTimeout(hideLoader, 2400);
     return false;
   }
@@ -312,94 +457,116 @@
       v._pending = undefined; seekRaw(v, t);
     });
   }
+  // Videowechsel ohne Überblendung: Das neue Video liegt sofort deckend OBEN,
+  // das alte bleibt noch kurz darunter sichtbar und wird erst entfernt, wenn
+  // das neue sicher gemalt wurde. So gibt es nie einen Moment ohne Bild.
+  var showToken = 0;
   function show(key){
-    Object.keys(vids).forEach(function(k){ vids[k].classList.toggle("bb-show", k === key); });
+    var next = vids[key], token = ++showToken;
+    Object.keys(vids).forEach(function(k){ vids[k].classList.remove("bb-top"); });
+    next.classList.add("bb-show", "bb-top");
+    requestAnimationFrame(function(){
+      requestAnimationFrame(function(){
+        if(token !== showToken) return;
+        Object.keys(vids).forEach(function(k){ if(k !== key) vids[k].classList.remove("bb-show"); });
+      });
+    });
   }
   function safeFrameTime(key, frame){ return frameTime(key, frame); }
-  var displayFailed = false, calloutsFailed = false;
+  /* ---------- Features (Display, Battery, …) ---------- */
+  // Jedes Feature hat ein eigenes Transition-Video + Overlay-Bild und ist nur in Schwarz verfügbar.
+  var FEATURE_KEYS = Object.keys(CONFIG.features);
+  var featureState = {};
+  var activeFeature = null;
+  FEATURE_KEYS.forEach(function(name){
+    featureState[name] = {
+      option: root.querySelector('[data-feature="' + name + '"]'),
+      overlay: root.querySelector('.bb-callouts[data-overlay="' + name + '"]'),
+      mediaReady: false, mediaFailed: false, overlayReady: false, overlayFailed: false
+    };
+  });
   function updateFeatureAvailability(){
-    displayOption.disabled = current !== "black" || !displayMediaReady || !calloutsReady || featureBusy || featureMode || busy;
-    displayOption.classList.toggle("bb-available", current === "black" && displayMediaReady && calloutsReady && !featureBusy && !featureMode && !busy);
-    var note = current !== "black" ? "Black only" :
-      (!displayMediaReady ? (displayFailed ? "Video missing" : "Loading …") :
-      (!calloutsReady ? (calloutsFailed ? "Overlay missing" : "Loading …") : "Feature"));
-    displayOption.querySelector(".bb-feature-note").textContent = note;
+    var free = current === "black" && !featureBusy && !featureMode && !busy;
+    FEATURE_KEYS.forEach(function(name){
+      var s = featureState[name], ready = s.mediaReady && s.overlayReady;
+      s.option.disabled = !(free && ready);
+      s.option.classList.toggle("bb-available", free && ready);
+      var note = current !== "black" ? "Black only" :
+        (!s.mediaReady ? (s.mediaFailed ? "Video missing" : loadingNote(CONFIG.features[name].video)) :
+        (!s.overlayReady ? (s.overlayFailed ? "Overlay missing" : "Loading …") : "Feature"));
+      s.option.querySelector(".bb-feature-note").textContent = note;
+    });
     dummyOptions.forEach(function(option){ option.disabled = true; });
   }
-  vids.display.addEventListener("loadedmetadata", function(){
-    displayMediaReady = true; displayFailed = false;
-    updateFeatureAvailability();
+  FEATURE_KEYS.forEach(function(name){
+    var s = featureState[name], v = vids[CONFIG.features[name].video];
+    v.addEventListener("loadedmetadata", function(){ s.mediaReady = true; s.mediaFailed = false; updateFeatureAvailability(); });
+    v.addEventListener("error", function(){ s.mediaReady = false; s.mediaFailed = true; updateFeatureAvailability(); });
+    if(v.readyState >= 1) s.mediaReady = true;
+    s.overlay.addEventListener("load", function(){ s.overlayReady = true; s.overlayFailed = false; updateFeatureAvailability(); });
+    s.overlay.addEventListener("error", function(){ s.overlayReady = false; s.overlayFailed = true; updateFeatureAvailability(); });
+    if(s.overlay.complete && s.overlay.naturalWidth > 0) s.overlayReady = true;
   });
-  vids.display.addEventListener("error", function(){
-    displayMediaReady = false; displayFailed = true;
-    updateFeatureAvailability();
-  });
-  if(vids.display.readyState >= 1) displayMediaReady = true;
-  callouts.addEventListener("load", function(){
-    calloutsReady = true; calloutsFailed = false;
-    updateFeatureAvailability();
-  });
-  callouts.addEventListener("error", function(){
-    calloutsReady = false; calloutsFailed = true;
-    updateFeatureAvailability();
-  });
-  if(callouts.complete && callouts.naturalWidth > 0) calloutsReady = true;
-  function fadeCallouts(incoming){
+  function fadeOverlay(el, incoming){
     return new Promise(function(resolve){
-      callouts.classList.remove("bb-overlay-in","bb-overlay-out");
-      void callouts.offsetWidth;
-      callouts.classList.add(incoming ? "bb-overlay-in" : "bb-overlay-out");
+      el.classList.remove("bb-overlay-in","bb-overlay-out");
+      void el.offsetWidth;
+      el.classList.add(incoming ? "bb-overlay-in" : "bb-overlay-out");
       window.setTimeout(function(){
-        callouts.classList.remove("bb-overlay-in","bb-overlay-out");
-        callouts.style.opacity = incoming ? "1" : "0";
+        el.classList.remove("bb-overlay-in","bb-overlay-out");
+        el.style.opacity = incoming ? "1" : "0";
         resolve();
       }, 680);
     });
   }
-  function playDisplay(reverse){
+  function playFeature(name, reverse){
     return new Promise(function(resolve){
-      var v = vids.display, n = CONFIG.files.display.frames;
+      var key = CONFIG.features[name].video, v = vids[key], n = CONFIG.files[key].frames;
       var duration = Number.isFinite(v.duration) && v.duration > 0 ? v.duration * 1000 : n * 33.333;
       var start = reverse ? n - 1 : 0, end = reverse ? 0 : n - 1;
       var t0 = performance.now();
       (function step(now){
         var k = Math.min(1, (now - t0) / duration);
         var frame = Math.round(start + (end - start) * k);
-        seek(v, safeFrameTime("display", frame));
+        seek(v, safeFrameTime(key, frame));
         if(k < 1) requestAnimationFrame(step);
-        else { seek(v, safeFrameTime("display", end)); resolve(); }
+        else { seek(v, safeFrameTime(key, end)); resolve(); }
       })(t0);
     });
   }
-  async function enterDisplay(){
+  async function enterFeature(name){
     if(featureBusy || featureMode || current !== "black") return;
+    var key = CONFIG.features[name].video, s = featureState[name];
     featureBusy = true;
-    if(!(await ensure(["display"]))){ featureBusy = false; updateFeatureAvailability(); return; }
+    if(!(await ensure([key]))){ featureBusy = false; updateFeatureAvailability(); return; }
+    activeFeature = name;
     stage.classList.add("bb-ui-hidden");          // Slider, Farben und Features sofort ausblenden
     updateFeatureAvailability();
     await snapToCenter(false);
     featureMode = true;
     stage.classList.add("bb-feature-mode");
     controls.classList.add("bb-controls-hidden");
-    callouts.style.opacity = "0";
-    await seekAsync(vids.display, safeFrameTime("display", 0));
-    show("display");
-    await playDisplay(false);
-    await fadeCallouts(true);
+    s.overlay.style.opacity = "0";
+    await seekAsync(vids[key], safeFrameTime(key, 0));
+    show(key);
+    await playFeature(name, false);               // 1. Transition-Video
+    await fadeOverlay(s.overlay, true);           // 2. Overlay langsam einblenden
     featureBusy = false;
     exitButton.focus({preventScroll:true});
   }
-  async function exitDisplay(){
-    if(featureBusy || !featureMode) return;
+  async function exitFeature(){
+    if(featureBusy || !featureMode || !activeFeature) return;
+    var name = activeFeature, s = featureState[name];
     featureBusy = true;
     exitButton.disabled = true;
-    await fadeCallouts(false);
-    await playDisplay(true);
+    await fadeOverlay(s.overlay, false);          // Overlay ausblenden
+    await playFeature(name, true);                // Transition rückwärts
     await seekAsync(vids.black, frameTime("black", 0));
     current = "black";
     show("black");
-    callouts.style.opacity = "0";
+    s.overlay.style.opacity = "0";
     featureMode = false;
+    activeFeature = null;
     stage.classList.remove("bb-feature-mode");
     controls.classList.remove("bb-controls-hidden");
     stage.classList.remove("bb-ui-hidden");
@@ -408,10 +575,12 @@
     featureBusy = false;
     updateFeatureAvailability();
   }
-  displayOption.addEventListener("click", enterDisplay);
-  exitButton.addEventListener("click", exitDisplay);
+  FEATURE_KEYS.forEach(function(name){
+    featureState[name].option.addEventListener("click", function(){ enterFeature(name); });
+  });
+  exitButton.addEventListener("click", exitFeature);
   document.addEventListener("keydown", function(e){
-    if(e.key === "Escape" && featureMode) exitDisplay();
+    if(e.key === "Escape" && featureMode) exitFeature();
   });
   updateFeatureAvailability();
 
@@ -425,15 +594,20 @@
     rotateHint.classList.add("bb-hint-hidden");
     if(hintTimer) window.clearTimeout(hintTimer);
   }
-  if(!hintAlreadySeen){
+  var hintStarted = false;
+  function startRotateHint(){              // erst nach dem Laden zeigen, nicht darunter verpuffen lassen
+    if(hintAlreadySeen || hintStarted) return;
+    hintStarted = true;
     requestAnimationFrame(function(){
       rotateHint.classList.add("bb-hint-visible");
       try { window.localStorage.setItem(hintStorageKey, "1"); } catch(_) {}
       hintTimer = window.setTimeout(hideRotateHint, 5000);
     });
+  }
+  if(!hintAlreadySeen){
     slider.addEventListener("pointerdown", hideRotateHint, { once:true });
     btns.forEach(function(b){ b.addEventListener("click", hideRotateHint, { once:true }); });
-    displayOption.addEventListener("click", hideRotateHint, { once:true });
+    root.querySelectorAll(".bb-feature-live").forEach(function(o){ o.addEventListener("click", hideRotateHint, { once:true }); });
   }
 
   /* ---------- Soft-Limit ---------- */
@@ -464,15 +638,23 @@
   window.addEventListener("resize", function(){ setS(sCur); });
 
   /* ---------- Weiches Nachlaufen beim Ziehen ---------- */
-  function tick(){
+  var lastTickT = 0, sVel = 0;           // sVel: aktuelle Geschwindigkeit (Slider-Einheiten pro Sekunde)
+  function tick(now){
     tickRAF = null;
-    sCur += (sTarget - sCur) * CONFIG.smoothing;
+    var dt = lastTickT ? Math.min(50, now - lastTickT) : 16.667;
+    lastTickT = now;
+    var prev = sCur;
+    // Zeitbasiert statt pro Frame: fühlt sich auf 60-, 90- und 120-Hz-Displays gleich an
+    var f = 1 - Math.pow(1 - CONFIG.smoothing, dt / 16.667);
+    sCur += (sTarget - sCur) * f;
     if(Math.abs(sTarget - sCur) < 0.0004) sCur = sTarget;
+    sVel = (sCur - prev) / dt * 1000;
     setS(sCur);
     if(dragging || sCur !== sTarget) tickRAF = requestAnimationFrame(tick);
+    else lastTickT = 0;
   }
-  function startTick(){ if(!tickRAF) tickRAF = requestAnimationFrame(tick); }
-  function stopTick(){ cancelAnimationFrame(tickRAF); tickRAF = null; }
+  function startTick(){ if(!tickRAF){ lastTickT = 0; tickRAF = requestAnimationFrame(tick); } }
+  function stopTick(){ cancelAnimationFrame(tickRAF); tickRAF = null; lastTickT = 0; }
 
   function fromPointer(e){
     var rect = slider.getBoundingClientRect();
@@ -511,21 +693,32 @@
       cancelAnimationFrame(snapRAF); stopTick();
       rRaw = 0; sTarget = 0;
       var from = sCur;
-      if(from === 0 || CONFIG.snapMs <= 0){ setS(0); return res(); }
-      var c1 = CONFIG.bounce, c3 = c1 + 1;
-      var t0 = performance.now();
+      if(from === 0 || CONFIG.snapMs <= 0){ sVel = 0; setS(0); return res(); }
+
+      if(withBounce){
+        // Beim Loslassen: gedämpfte Feder. Übernimmt die Geschwindigkeit vom Ziehen,
+        // schwingt je nach springDamping minimal über die Mitte und kommt ruhig zum Stehen.
+        var kS = CONFIG.springSpeed, c = 2 * CONFIG.springDamping * Math.sqrt(kS);
+        var x = sCur, v = Math.max(-5, Math.min(5, sVel)), last = performance.now(), t0 = last;
+        (function spring(now){
+          var dt = Math.min(0.032, Math.max(0, (now - last) / 1000)); last = now;
+          var n = Math.max(1, Math.ceil(dt / 0.004)), h = dt / n;
+          for(var i = 0; i < n; i++){ v += (-kS * x - c * v) * h; x += v * h; }
+          if((Math.abs(x) < 0.0006 && Math.abs(v) < 0.01) || now - t0 > 1800){ sVel = 0; setS(0); res(); return; }
+          setS(x);
+          snapRAF = requestAnimationFrame(spring);
+        })(last);
+        return;
+      }
+
+      // Bei Farb-/Feature-Wechsel: ruhiges Ausgleiten ohne Überschwingen
+      var t1 = performance.now();
       (function step(now){
-        var k = Math.min(1, (now - t0) / CONFIG.snapMs);
-        var e;
-        if(withBounce && c1 > 0){                       // easeOutBack: kurzes, leichtes Überschwingen
-          e = 1 + c3 * Math.pow(k - 1, 3) + c1 * Math.pow(k - 1, 2);
-        } else {
-          e = 1 - Math.pow(1 - k, 3);
-        }
-        setS(from * (1 - e));
+        var k = Math.min(1, (now - t1) / CONFIG.snapMs);
+        setS(from * Math.pow(1 - k, 3));
         if(k < 1) snapRAF = requestAnimationFrame(step);
-        else { setS(0); res(); }
-      })(t0);
+        else { sVel = 0; setS(0); res(); }
+      })(t1);
     });
   }
   function release(){
@@ -586,33 +779,50 @@
 
   /* ---------- Start ---------- */
   var slowTimer = null;
-  function loadBackground(){             // Rest nacheinander laden: Overlay-Bild, Weiß, Switch, Display
-    if(!callouts.getAttribute("src")) callouts.src = callouts.getAttribute("data-src");
-    var order = ["white", "switch", "display"];
+  function loadOverlay(name){
+    return new Promise(function(res){
+      var img = featureState[name].overlay;
+      if(img.getAttribute("src")){ res(); return; }
+      img.addEventListener("load", res, { once:true });
+      img.addEventListener("error", res, { once:true });
+      img.src = CONFIG.folder + encodeURI(CONFIG.features[name].overlay);
+    });
+  }
+  // Nach dem Start: Weiß, Switch, dann jedes Feature (Video + Overlay), strikt nacheinander.
+  function loadBackground(){
+    var steps = [function(){ return prepare("white"); }, function(){ return prepare("switch"); }];
+    FEATURE_KEYS.forEach(function(name){
+      steps.push(function(){ return prepare(CONFIG.features[name].video); });
+      steps.push(function(){ return loadOverlay(name); });
+    });
     (function next(i){
-      if(i >= order.length) return;
-      prepare(order[i]).then(function(){ next(i + 1); });
+      if(i >= steps.length) return;
+      steps[i]().then(function(){ next(i + 1); }, function(){ next(i + 1); });
     })(0);
   }
   function boot(){
-    showLoader("Lade …", false);
-    clearTimeout(slowTimer);
-    slowTimer = setTimeout(function(){     // dauert es lange, kann man neu anstoßen
-      loadText.textContent = "Dauert länger als gewöhnlich …";
-      retryBtn.hidden = false;
-    }, CONFIG.slowHintMs);
+    showLoader([current], false);
+    lastProgressAt = Date.now();
+    clearInterval(slowTimer);
+    slowTimer = setInterval(function(){     // kommt lange nichts mehr an, kann man neu anstoßen
+      if(!loader.classList.contains("bb-error") && Date.now() - lastProgressAt > CONFIG.slowHintMs){
+        loadText.textContent = "Dauert länger als gewöhnlich …";
+        retryBtn.hidden = false;
+      }
+    }, 1000);
     prepare(current).then(function(ok){
       if(!ok){
-        clearTimeout(slowTimer);
-        loadText.textContent = "Video nicht gefunden: " + CONFIG.files[current].src;
-        retryBtn.hidden = false;
+        clearInterval(slowTimer);
+        loaderError("Video nicht gefunden: " + CONFIG.files[current].src, true);
         return;
       }
       return seekAsync(vids[current], frameTime(current, 0)).then(function(){
-        clearTimeout(slowTimer);
+        clearInterval(slowTimer);
         show(current);
-        hideLoader();
-        loadBackground();
+        hideLoader();                        // UI wird normal sichtbar …
+        startRotateHint();
+        refreshLoadState();
+        loadBackground();                    // … und der Rest lädt im Hintergrund
       });
     });
   }
@@ -624,7 +834,7 @@
 })();
 </script>
 
-    <footer class="page-footer">Interactive 3D product viewer (Demo)</footer>
+    <footer class="page-footer">Interactive 3D product viewer (Demo)<a class="footer-logo-link" href="https://www.instagram.com/zerostudios.otr" target="_blank" rel="noopener noreferrer" aria-label="Instagram: zerostudios.otr"><img class="footer-logo" src="bioblade-media/logo.png" alt="" onerror="this.parentNode.remove()"></a></footer>
   </main>
 </body>
 </html>
